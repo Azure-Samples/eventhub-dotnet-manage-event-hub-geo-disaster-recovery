@@ -1,10 +1,10 @@
 ---
-services: Eventhub
-platforms: .Net
+services: Event-Hub
+platforms: dotnet
 author: anuchandy
 ---
 
-# Getting Started with Eventhub - Manage Event Hub Geo Disaster Recovery - in .Net #
+# Getting started on managing event hub geo-disaster recovery using C# #
 
           Azure Event Hub sample for managing geo disaster recovery pairing -
             - Create two event hub namespaces
@@ -18,7 +18,7 @@ author: anuchandy
 
 To run this sample:
 
-Set the environment variable `AZURE_AUTH_LOCATION` with the full path for an auth file. See [how to create an auth file](https://github.com/Azure/azure-sdk-for-net/blob/Fluent/AUTH.md).
+Set the environment variable `AZURE_AUTH_LOCATION` with the full path for an auth file. See [how to create an auth file](https://github.com/Azure/azure-libraries-for-java/blob/master/AUTH.md).
 
     git clone https://github.com/Azure-Samples/eventhub-dotnet-manage-event-hub-geo-disaster-recovery.git
 
