@@ -4,19 +4,19 @@ languages:
 - csharp
 products:
 - azure
-services: Event-Hub
-platforms: dotnet
-author: yaohaizh
+extensions:
+- services: Event-Hub
+- platforms: dotnet
 ---
 
 # Getting started on managing event hub geo-disaster recovery using C# #
 
-          Azure Event Hub sample for managing geo disaster recovery pairing -
-            - Create two event hub namespaces
-            - Create a pairing between two namespaces
-            - Create an event hub in the primary namespace and retrieve it from the secondary namespace
-            - Retrieve the pairing connection string
-            - Fail over so that secondary namespace become primary.
+ Azure Event Hub sample for managing geo disaster recovery pairing -
+   - Create two event hub namespaces
+   - Create a pairing between two namespaces
+   - Create an event hub in the primary namespace and retrieve it from the secondary namespace
+   - Retrieve the pairing connection string
+   - Fail over so that secondary namespace become primary.
 
 
 ## Running this Sample ##
