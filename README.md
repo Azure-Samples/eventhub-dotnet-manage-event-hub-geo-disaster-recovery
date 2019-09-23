@@ -7,6 +7,7 @@ products:
 extensions:
 - services: Event-Hub
 - platforms: dotnet
+description: "Azure Event Hub sample for managing geo disaster recovery pairing."
 ---
 
 # Getting started on managing event hub geo-disaster recovery using C# #
