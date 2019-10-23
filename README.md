@@ -13,7 +13,7 @@ description: "Azure Event Hub sample for managing geo disaster recovery pairing.
 urlFragment: getting-started-on-managing-event-hub-geo-disaster-recovery-using-c
 ---
 
-# Getting started on managing event hub geo-disaster recovery using C# #
+# Get started managing Azure Event Hubs geo-disaster recovery (C#)
 
 Azure Event Hub sample for managing geo disaster recovery pairing.
  
