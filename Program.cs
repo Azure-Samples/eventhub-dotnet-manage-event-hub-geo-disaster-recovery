@@ -9,9 +9,6 @@ using Azure.ResourceManager.EventHubs;
 using Azure.ResourceManager.EventHubs.Models;
 using Azure.ResourceManager.Resources;
 using Azure.ResourceManager.Samples.Common;
-using Azure.ResourceManager.Storage;
-using Azure.ResourceManager.Storage.Models;
-using System.Xml.Linq;
 
 
 namespace ManageEventHubGeoDisasterRecovery
