@@ -1,13 +1,15 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using Microsoft.Azure.Management.Eventhub.Fluent;
-using Microsoft.Azure.Management.EventHub.Fluent.Models;
-using Microsoft.Azure.Management.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
-using Microsoft.Azure.Management.Samples.Common;
-using System;
+using Azure;
+using Azure.Core;
+using Azure.Identity;
+using Azure.ResourceManager;
+using Azure.ResourceManager.EventHubs;
+using Azure.ResourceManager.EventHubs.Models;
+using Azure.ResourceManager.Resources;
+using Azure.ResourceManager.Samples.Common;
+
 
 namespace ManageEventHubGeoDisasterRecovery
 {
@@ -21,47 +23,45 @@ namespace ManageEventHubGeoDisasterRecovery
          *   - Retrieve the pairing connection string
          *   - Fail over so that secondary namespace become primary.
          */
-        public static void RunSample(IAzure azure)
+
+         private static ResourceIdentifier? _resourceGroupId = null;
+
+        public static async Task RunSample(ArmClient client)
         {
-            Region region = Region.USEast;
-            string rgName = SdkContext.RandomResourceName("rgeh", 15);
-            string primaryNamespaceName = SdkContext.RandomResourceName("ns", 15);
-            string secondaryNamespaceName = SdkContext.RandomResourceName("ns", 15);
-            string geoDRName = SdkContext.RandomResourceName("geodr", 14);
-            string eventHubName = SdkContext.RandomResourceName("eh", 14);
+            string rgName = Utilities.CreateRandomName("rgeh");
+            string primaryNamespaceName = Utilities.CreateRandomName("ns");
+            string secondaryNamespaceName = Utilities.CreateRandomName("ns");
+            string geoDRName = Utilities.CreateRandomName("geodr");
+            string eventHubName = Utilities.CreateRandomName("eh");
             bool isFailOverSucceeded = false;
-            IEventHubDisasterRecoveryPairing pairing = null;
+            EventHubsDisasterRecoveryResource pairing = null;
 
             try
             {
                 //============================================================
                 // Create resource group for the namespaces and recovery pairings
                 //
-                IResourceGroup resourceGroup = azure.ResourceGroups.Define(rgName)
-                        .WithRegion(Region.USSouthCentral)
-                        .Create();
+                SubscriptionResource subscription = await client.GetDefaultSubscriptionAsync();
+                ResourceGroupData resourceGroupData = new ResourceGroupData(AzureLocation.SouthCentralUS);
+                ResourceGroupResource resourceGroup = (await subscription.GetResourceGroups()
+                    .CreateOrUpdateAsync(WaitUntil.Completed, rgName, resourceGroupData)).Value;
+                _resourceGroupId = resourceGroup.Id;
 
                 Utilities.Log($"Creating primary event hub namespace {primaryNamespaceName}");
 
-                IEventHubNamespace primaryNamespace = azure.EventHubNamespaces
-                    .Define(primaryNamespaceName)
-                    .WithRegion(Region.USSouthCentral)
-                    .WithExistingResourceGroup(resourceGroup)
-                    .Create();
+                EventHubsNamespaceData eventHubsNamespaceData = new EventHubsNamespaceData(AzureLocation.SouthCentralUS);
+                EventHubsNamespaceResource primaryNamespace = (await resourceGroup.GetEventHubsNamespaces()
+                    .CreateOrUpdateAsync(WaitUntil.Completed, primaryNamespaceName, eventHubsNamespaceData)).Value;
 
-                Utilities.Log("Primary event hub namespace created");
-                Utilities.Print(primaryNamespace);
+                Utilities.Log("Primary event hub namespace created with name: " + primaryNamespace.Data.Name);
 
                 Utilities.Log($"Creating secondary event hub namespace {primaryNamespaceName}");
 
-                IEventHubNamespace secondaryNamespace = azure.EventHubNamespaces
-                        .Define(secondaryNamespaceName)
-                        .WithRegion(Region.USNorthCentral)
-                        .WithExistingResourceGroup(resourceGroup)
-                        .Create();
+                EventHubsNamespaceData secondaryNamespaceData = new EventHubsNamespaceData(AzureLocation.NorthCentralUS);
+                EventHubsNamespaceResource secondaryNamespace = (await resourceGroup.GetEventHubsNamespaces()
+                    .CreateOrUpdateAsync(WaitUntil.Completed, secondaryNamespaceName, secondaryNamespaceData)).Value;
 
-                Utilities.Log("Secondary event hub namespace created");
-                Utilities.Print(secondaryNamespace);
+                Utilities.Log("Secondary event hub namespace created with name: " + secondaryNamespace.Data);
 
                 //============================================================
                 // Create primary and secondary namespaces and recovery pairing
@@ -69,24 +69,14 @@ namespace ManageEventHubGeoDisasterRecovery
 
                 Utilities.Log($"Creating geo-disaster recovery pairing {geoDRName}");
 
-                pairing = azure.EventHubDisasterRecoveryPairings
-                        .Define(geoDRName)
-                        .WithExistingPrimaryNamespace(primaryNamespace)
-                        .WithExistingSecondaryNamespace(secondaryNamespace)
-                        .Create();
-
-                while (pairing.ProvisioningState != ProvisioningStateDR.Succeeded)
+                EventHubsDisasterRecoveryData disasterRecoveryData = new EventHubsDisasterRecoveryData()
                 {
-                    pairing = pairing.Refresh();
-                    SdkContext.DelayProvider.Delay(15 * 1000);
-                    if (pairing.ProvisioningState == ProvisioningStateDR.Failed)
-                    {
-                        throw new Exception("Provisioning state of the pairing is FAILED");
-                    }
-                }
+                    PartnerNamespace = secondaryNamespace.Id
+                };
+                pairing = (await primaryNamespace.GetEventHubsDisasterRecoveries()
+                    .CreateOrUpdateAsync(WaitUntil.Completed, geoDRName, disasterRecoveryData)).Value;
 
                 Utilities.Log($"Created geo-disaster recovery pairing {geoDRName}");
-                Utilities.Print(pairing);
 
                 //============================================================
                 // Create an event hub and consumer group in primary namespace
@@ -94,38 +84,36 @@ namespace ManageEventHubGeoDisasterRecovery
 
                 Utilities.Log("Creating an event hub and consumer group in primary namespace");
 
-                IEventHub eventHubInPrimaryNamespace = azure.EventHubs
-                        .Define(eventHubName)
-                        .WithExistingNamespace(primaryNamespace)
-                        .WithNewConsumerGroup("consumerGrp1")
-                        .Create();
+                EventHubResource eventHubInPrimaryNamespace = (await primaryNamespace.GetEventHubs()
+                    .CreateOrUpdateAsync(WaitUntil.Completed, eventHubName, new EventHubData())).Value;
+
+                EventHubsConsumerGroupData eventHubsConsumerGroupData = new EventHubsConsumerGroupData() { UserMetadata = "sometadata" };
+                EventHubsConsumerGroupResource eventHubsConsumerGroup = (await eventHubInPrimaryNamespace.GetEventHubsConsumerGroups()
+                    .CreateOrUpdateAsync(WaitUntil.Completed, "consumerGrp1", eventHubsConsumerGroupData)).Value;
 
                 Utilities.Log("Created event hub and consumer group in primary namespace");
-                Utilities.Print(eventHubInPrimaryNamespace);
 
-                Utilities.Log("Waiting for 60 seconds to allow metadata to sync across primary and secondary");
-                SdkContext.DelayProvider.Delay(60 * 1000); // Wait for syncing to finish
+                Utilities.Log("Waiting for 80 seconds to allow metadata to sync across primary and secondary");
+                Thread.Sleep(80 * 1000); // Wait for syncing to finish
 
                 Utilities.Log("Retrieving the event hubs in secondary namespace");
 
-                IEventHub eventHubInSecondaryNamespace = azure.EventHubs.GetByName(rgName, secondaryNamespaceName, eventHubName);
+                EventHubResource eventHubInSecondaryNamespace = await secondaryNamespace.GetEventHubs().GetAsync(eventHubName);
 
                 Utilities.Log("Retrieved the event hubs in secondary namespace");
-                Utilities.Print(eventHubInSecondaryNamespace);
 
                 //============================================================
                 // Retrieving the connection string
                 //
-                var rules = pairing.ListAuthorizationRules();
-                foreach (IDisasterRecoveryPairingAuthorizationRule rule in rules)
+                var rules = pairing.GetEventHubsDisasterRecoveryAuthorizationRules().GetAllAsync();
+                await foreach (var rule in rules)
                 {
-                    IDisasterRecoveryPairingAuthorizationKey key = rule.GetKeys();
-                    Utilities.Print(key);
+                    EventHubsAccessKeys key = await rule.GetKeysAsync();
+                    Utilities.Log("Key is: " + key.AliasPrimaryConnectionString);
                 }
 
                 Utilities.Log("Initiating fail over");
-
-                pairing.FailOver();
+                await (await secondaryNamespace.GetEventHubsDisasterRecoveryAsync(eventHubName)).Value.FailOverAsync();
                 isFailOverSucceeded = true;
 
                 Utilities.Log("Fail over initiated");
@@ -138,16 +126,22 @@ namespace ManageEventHubGeoDisasterRecovery
                     {
                         // It is necessary to break pairing before deleting resource group
                         //
+                        Utilities.Log("Pairing breaking");
                         if (pairing != null && !isFailOverSucceeded)
                         {
-                            pairing.BreakPairing();
+                            await pairing.BreakPairingAsync();
                         }
                     }
                     catch (Exception ex)
                     {
                         Utilities.Log("Pairing breaking failed:" + ex.Message);
                     }
-                    azure.ResourceGroups.BeginDeleteByName(rgName);
+                    if (_resourceGroupId is not null)
+                    {
+                        Console.WriteLine($"Deleting Resource Group: {_resourceGroupId}");
+                        await client.GetResourceGroupResource(_resourceGroupId).DeleteAsync(WaitUntil.Completed);
+                        Console.WriteLine($"Deleted Resource Group: {_resourceGroupId}");
+                    }
                 }
                 catch (NullReferenceException)
                 {
@@ -160,24 +154,19 @@ namespace ManageEventHubGeoDisasterRecovery
             }
         }
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             try
             {
                 //=================================================================
                 // Authenticate
-                var credentials = SdkContext.AzureCredentialsFactory.FromFile(Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION"));
+                var credential = new DefaultAzureCredential();
 
-                var azure = Azure
-                    .Configure()
-                    .WithLogLevel(HttpLoggingDelegatingHandler.Level.Basic)
-                    .Authenticate(credentials)
-                    .WithDefaultSubscription();
+                var subscriptionId = Environment.GetEnvironmentVariable("AZURE_SUBSCRIPTION_ID");
+                // you can also use `new ArmClient(credential)` here, and the default subscription will be the first subscription in your list of subscription
+                var client = new ArmClient(credential, subscriptionId);
 
-                // Print selected subscription
-                Utilities.Log("Selected subscription: " + azure.SubscriptionId);
-
-                RunSample(azure);
+                await RunSample(client);
             }
             catch (Exception ex)
             {
